@@ -53,7 +53,7 @@ volatile uint32_t g_systickCounter;
 /*******************************************************************************
  * Code
  ******************************************************************************/
-void SysTick_Handler(void)
+void SysTickIntHandler(void)
 {
     if (g_systickCounter != 0U)
     { 
@@ -86,7 +86,7 @@ int main(void)
     GPIO_PinInit(BOARD_LED_GPIO, BOARD_LED_GPIO_PIN, &led_config);
 
     /* Set systick reload value to generate 1ms interrupt */
-    if(SysTick_Config(SystemCoreClock / 1000U))
+    if(SysTick_Config(2000U))
     {
         while(1)
         {
@@ -97,6 +97,7 @@ int main(void)
     {
         /* Delay 1000 ms */
         SysTick_DelayTicks(1000U);
+//	    for (int i = 0; i < 1000000; i++);
         GPIO_PortToggle(BOARD_LED_GPIO, 1u << BOARD_LED_GPIO_PIN);
     }
 }

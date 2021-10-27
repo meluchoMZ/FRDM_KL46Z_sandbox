@@ -35,14 +35,14 @@ binary: $(TARGET).elf
 flash: $(TARGET).elf
 	@echo Loading binary into board
 	@echo
-	openocd -f ./conf/openocd.cfg -c "init;program led_blinky.elf verify reset; exit"
+	openocd -f ./conf/openocd.cfg -c "init;program $(TARGET).elf verify reset; exit"
 	@echo
 
 install: binary
 	
 	@echo Loading binary into board
 	@echo
-	openocd -f ./conf/openocd.cfg -c "init;program led_blinky.bin verify reset; exit"
+	openocd -f ./conf/openocd.cfg -c "init;program $(TARGET).bin verify reset; exit"
 	@echo
 
 clean:

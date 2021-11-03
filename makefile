@@ -3,10 +3,10 @@
 
 CC=arm-none-eabi-gcc
 LD=arm-none-eabi-gcc
-CFLAGS=-DCPU_MKL46Z256VLL4 -I./include/ -I./src/include/ -g -Wall -ffunction-sections
-LDFLAGS= -g --specs=nano.specs -Wl,--gc-sections,-Map,$(TARGET).map,-Tlink.ld -ffunction-sections
+CFLAGS=-DCPU_MKL46Z256VLL4 -I./include/ -I./src/include/ -ggdb3 -Wall -ffunction-sections
+LDFLAGS= -ggdb3 --specs=nano.specs -Wl,--gc-sections,-Map,$(TARGET).map,-Tlink.ld -ffunction-sections
 ARCHFLAGS=-mthumb -mcpu=cortex-m0plus
-TARGET=led_blinky
+TARGET=p2
 SRC=$(shell find . -type f -iname '*.c')
 HEADERS=$(shell find . -type f -iname '*.h')
 OBJ=build/*.o

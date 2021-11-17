@@ -1,103 +1,92 @@
-/*
- * The Clear BSD License
- * Copyright 2017 NXP
- * All rights reserved.
- *
- * Redistribution and use in source and binary forms, with or without modification,
- * are permitted (subject to the limitations in the disclaimer below) provided
- * that the following conditions are met:
- *
- * o Redistributions of source code must retain the above copyright notice, this list
- *   of conditions and the following disclaimer.
- *
- * o Redistributions in binary form must reproduce the above copyright notice, this
- *   list of conditions and the following disclaimer in the documentation and/or
- *   other materials provided with the distribution.
- *
- * o Neither the name of the copyright holder nor the names of its
- *   contributors may be used to endorse or promote products derived from this
- *   software without specific prior written permission.
- *
- * NO EXPRESS OR IMPLIED LICENSES TO ANY PARTY'S PATENT RIGHTS ARE GRANTED BY THIS LICENSE.
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
- * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
- * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
- * DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR
- * ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
- * (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
- * LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON
- * ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
- * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
- * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
- */
+// Simple automata implementation
+// Embedded Systems, 2021
+// Miguel Blanco Godón
 
-#include "board.h"
-#include "fsl_gpio.h"
+#include "MKL46Z4.h"
 
-#include "pin_mux.h"
-/*******************************************************************************
- * Definitions
- ******************************************************************************/
-#define BOARD_LED_GPIO BOARD_LED_RED_GPIO
-#define BOARD_LED_GPIO_PIN BOARD_LED_RED_GPIO_PIN
-
-/*******************************************************************************
- * Prototypes
- ******************************************************************************/
-
-/*******************************************************************************
- * Variables
- ******************************************************************************/
-volatile uint32_t g_systickCounter;
-
-/*******************************************************************************
- * Code
- ******************************************************************************/
-void SysTickIntHandler(void)
+void init_green_led(void)
 {
-    if (g_systickCounter != 0U)
-    { 
-        g_systickCounter--;
-    }
+	SIM->COPC = 0x0;
+	SIM->SCGC5 |= SIM_SCGC5_PORTD_MASK;
+	PORTD->PCR[5] = PORT_PCR_MUX(1);
+	GPIOD->PDDR |= (1 << 5);
+	GPIOD->PSOR = (1 << 5);
 }
 
-void SysTick_DelayTicks(uint32_t n)
+void init_red_led(void)
 {
-    g_systickCounter = n;
-    while(g_systickCounter != 0U)
-    {
-    }
+	SIM->COPC = 0x0;
+	SIM->SCGC5 |= SIM_SCGC5_PORTE_MASK;
+	PORTE->PCR[29] = PORT_PCR_MUX(1);
+	GPIOE->PDDR |= (1 << 29);
+	GPIOE->PSOR = (1 << 29);
 }
 
-/*!
- * @brief Main function
- */
+void enable_sw3(void)
+{
+	SIM->SCGC5 |= SIM_SCGC5_PORTC_MASK;
+	PORTC->PCR[12] = PORT_PCR_MUX(1);
+	PORTC->PCR[12] |= (1 << 16);
+	PORTC->PCR[12] |= (1 << 19);
+	PORTC->PCR[12] |= 0x3;
+	GPIOC->PDDR &= ~(1 << 12);
+}
+
+void enable_sw1(void)
+{
+	SIM->SCGC5 |= SIM_SCGC5_PORTC_MASK;
+	PORTC->PCR[3] = PORT_PCR_MUX(1);
+	PORTC->PCR[3] |= (1 << 16);
+	PORTC->PCR[3] |= (1 << 19);
+	PORTC->PCR[3] |= 0x3;
+	GPIOC->PDDR &= ~(1 << 3);
+}
+
+void enable_gpio_interrupt(void)
+{
+	NVIC_SetPriority(31, 1);
+	NVIC_EnableIRQ(31);
+}
+
+void PORTDIntHandler(void)
+{
+	volatile static uint8_t d1 = 0x0;
+	volatile static uint8_t d2 = 0x0;
+	uint8_t s;
+
+	if ((PORTC->PCR[3] & (1 << 24)) == (1 << 24)) {
+		// interupt on SW1
+		PORTC->ISFR |= (1 << 3);
+		d1 = (d1+0x1)%2;
+	}
+	if ((PORTC->PCR[12] & (1 << 24)) == (1 << 24)) {
+		// interrupt on SW3
+		PORTC->ISFR |= (1 << 12);
+		d2 = (d2+0x1)%2;
+	}
+	s = d1 + d2;
+	switch (s)
+	{
+		case 0x0: 
+			GPIOD->PCOR |= (1 << 5);
+			GPIOE->PSOR |= (1 << 29);
+			break;
+		default:
+			GPIOD->PSOR |= (1 << 5);
+			GPIOE->PCOR |= (1 << 29);
+			break;
+	}
+}
+
 int main(void)
 {
-    /* Define the init structure for the output LED pin*/
-    gpio_pin_config_t led_config = {
-        kGPIO_DigitalOutput, 0,
-    };
-
-    /* Board pin init */
-    BOARD_InitPins();
-
-    /* Init output LED GPIO. */
-    GPIO_PinInit(BOARD_LED_GPIO, BOARD_LED_GPIO_PIN, &led_config);
-
-    /* Set systick reload value to generate 1ms interrupt */
-    if(SysTick_Config(2000U))
-    {
-        while(1)
-        {
-        }
-    }
-
-    while (1)
-    {
-        /* Delay 1000 ms */
-        SysTick_DelayTicks(1000U);
-//	    for (int i = 0; i < 1000000; i++);
-        GPIO_PortToggle(BOARD_LED_GPIO, 1u << BOARD_LED_GPIO_PIN);
-    }
+	init_green_led();
+	init_red_led();
+	enable_sw1();
+	enable_sw3();
+	enable_gpio_interrupt();
+	GPIOD->PTOR = (1 << 5);
+	while (1)
+		;
+	return 0;
 }

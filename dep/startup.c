@@ -207,7 +207,7 @@ void Default_ResetHandler(void)
 #pragma weak MCGIntHandler = Default_ResetHandler
 #pragma weak LPTMRIntHandler = Default_ResetHandler
 #pragma weak PORTAIntHandler = Default_ResetHandler
-#pragma weak PORTDIntHandler = Default_ResetHandler
+#pragma weak PORTDIntHandler = DefaultIntHandler
 
 //*****************************************************************************
 //! \brief This is the code that gets called when the processor receives an

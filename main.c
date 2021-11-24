@@ -108,20 +108,41 @@ void leds_ini()
   GPIOE->PSOR = (1 << 29);
 }
 
+// Hit condition: (else, it is a miss)
+// - Left switch matches red light
+// - Right switch matches green light
+
 int main(void)
 {
   irclk_ini(); // Enable internal ref clk to use by LCD
 
-  leds_ini();
-  sws_ini();
-
-  led_green_toggle(); // State 0: LEDgreen ON
-
   lcd_ini();
   lcd_display_dec(666);
 
-  while (1) {
+  // 'Random' sequence :-)
+  volatile unsigned int sequence = 0x32B14D98,
+    index = 0;
 
+  while (index < 32) {
+    if (sequence & (1 << index)) { //odd
+      //
+      // Switch on green led
+      // [...]
+      //
+    } else { //even
+      //
+      // Switch on red led
+      // [...]
+      //
+    }
+    // [...]
+  }
+
+  // Stop game and show blinking final result in LCD: hits:misses
+  // [...]
+  //
+
+  while (1) {
   }
 
   return 0;

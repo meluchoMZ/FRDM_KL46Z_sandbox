@@ -1,30 +1,28 @@
+// Embedded systems, 2021
+// Miguel Blanco Godón
+
+
 #include "MKL46Z4.h"
 #include "lcd.h"
 
-// LED (RG)
-// LED_GREEN = PTD5 (pin 98)
-// LED_RED = PTE29 (pin 26)
-
-// SWICHES
-// RIGHT (SW1) = PTC3 (pin 73)
-// LEFT (SW2) = PTC12 (pin 88)
-
-// Enable IRCLK (Internal Reference Clock)
-// see Chapter 24 in MCU doc
 #define GREEN 0
 #define RED 1
-#define UNDEFINED 255
-#define LOCKED 0
-#define UNLOCKED 1
+#define INVALID 0
+#define VALID 1
+#define DOT 0
+#define DASH 1
+#define S 5
+#define O 0
+#define NONE 255
+#define SO 50
+#define SOS 55
+#define TRUE 0
+#define FALSE 1
 
 
-// vars
-volatile static uint8_t lock = LOCKED;
-volatile static uint8_t hits = 0x0;
-volatile static uint8_t misses = 0x0;
-volatile static uint8_t ledStatus = UNDEFINED;
 
-
+volatile static uint8_t isSOS = FALSE;
+volatile static uint8_t arDefault;
 
 void irclk_ini()
 {
@@ -32,14 +30,6 @@ void irclk_ini()
   MCG->C2 = MCG_C2_IRCS(0); //0 32KHZ internal reference clock; 1= 4MHz irc
 }
 
-void delay(void)
-{
-  volatile int i;
-
-  for (i = 0; i < 1000000; i++);
-}
-
-// RIGHT_SWITCH (SW1) = PTC3
 void sw1_ini()
 {
   SIM->COPC = 0;
@@ -51,7 +41,6 @@ void sw1_ini()
   GPIOC->PDDR &= ~(1 << 3);
 }
 
-// LEFT_SWITCH (SW2) = PTC12
 void sw2_ini()
 {
   SIM->COPC = 0;
@@ -63,18 +52,6 @@ void sw2_ini()
   GPIOC->PDDR &= ~(1 << 12);
 }
 
-int sw1_check()
-{
-  return( !(GPIOC->PDIR & (1 << 3)) );
-}
-
-int sw2_check()
-{
-  return( !(GPIOC->PDIR & (1 << 12)) );
-}
-
-// RIGHT_SWITCH (SW1) = PTC3
-// LEFT_SWITCH (SW2) = PTC12
 void sws_ini()
 {
   SIM->COPC = 0;
@@ -84,7 +61,6 @@ void sws_ini()
   GPIOC->PDDR &= ~(1 << 3 | 1 << 12);
 }
 
-// LED_GREEN = PTD5
 void led_green_ini()
 {
   SIM->COPC = 0;
@@ -99,7 +75,6 @@ void led_green_toggle()
   GPIOD->PTOR = (1 << 5);
 }
 
-// LED_RED = PTE29
 void led_red_ini()
 {
   SIM->COPC = 0;
@@ -114,8 +89,6 @@ void led_red_toggle(void)
   GPIOE->PTOR = (1 << 29);
 }
 
-// LED_RED = PTE29
-// LED_GREEN = PTD5
 void leds_ini()
 {
   SIM->COPC = 0;
@@ -129,22 +102,6 @@ void leds_ini()
   GPIOE->PSOR = (1 << 29);
 }
 
-// Hit condition: (else, it is a miss)
-// - Left switch matches red light
-// - Right switch matches green light
-
-void switchLeds (int green)
-{
-	if (green == 0)	{
-		GPIOD->PCOR |= (1 << 5);
-		GPIOE->PSOR |= (1 << 29);
-		ledStatus = GREEN;
-	} else {
-		GPIOD->PSOR |= (1 << 5);
-		GPIOE->PCOR |= (1 << 29);
-		ledStatus = RED;
-	}
-}
 
 void enableInterrupts(void)
 {
@@ -156,30 +113,109 @@ void disableInterrupts(void)
 {
 	NVIC_DisableIRQ(31);
 }
-	
+
+
 void PORTDIntHandler(void)
 {
+	uint8_t validInput = INVALID;
+	uint8_t input;
+	volatile static uint8_t state;
+	uint8_t nextState = 0x00;
+	volatile static uint8_t lcdValue = NONE;
+
+	GPIOD->PCOR |= (1 << 5);
+	for (int i = 0; i < 100000; i++);
+	GPIOD->PSOR |= (1 << 5);
+
 	if ((PORTC->PCR[3] & (1 << 24)) == (1 << 24)) {
-		// interrupt on sw1
 		PORTC->ISFR |= (1 << 3);
-		if (ledStatus == GREEN) {
-			hits++;
-		} else {
-			misses++;
-		}
+		validInput = VALID;
+		input = DOT;
 	}
 
 	if ((PORTC->PCR[12] & (1 << 24)) == (1 << 24)) {
-		// interrupt on sw2
 		PORTC->ISFR |= (1 << 12);
-		if (ledStatus == RED) {
-			hits++;
-		} else {
-			misses++;
-		}
+		validInput = (validInput == VALID) ? INVALID : VALID;
+		input = DASH;
 	}
-	// unlocking loop so that the "game" can continue
-	lock = UNLOCKED;
+
+	if (validInput == INVALID) {
+		return;
+	}
+	switch (state)
+	{
+		// S(0)
+		case 0x01:
+			nextState = (input == DOT) ? 0x02 : 0x00;
+			if (input == DASH)
+				lcdValue = NONE;
+			break;
+		// S(1)
+		case 0x02:
+			nextState = 0x00;
+			if (input == DASH) {
+				lcdValue = NONE;
+				break;
+			}
+			if (lcdValue == SO) {
+				lcdValue = SOS;
+				break;
+			}
+			lcdValue = S;
+			break;
+		// O(0)
+		case 0x04:
+			nextState = (input == DASH) ? 0x05 : 0x00;
+			if (input == DOT || lcdValue == SO)
+				lcdValue = NONE;
+			break;
+		// O(1)
+		case 0x05:
+			nextState = 0x00; 
+			if (input == DOT) {
+				lcdValue = NONE;
+				break;
+			}
+			lcdValue = (lcdValue == S) ? SO : NONE;
+			break;
+		// initial state
+		default:
+			nextState = (input == DOT) ? 0x01 : 0x04;
+			if (lcdValue == SO && input == DASH)
+				lcdValue = NONE;
+			if (lcdValue == S && input == DOT)
+				lcdValue = NONE;
+			break;
+	}
+	switch (lcdValue)
+	{
+		case S:
+  			//LCD->AR = LCD_AR_BLANK_MASK; 
+			//LCD->AR = arDefault;
+			lcd_ini();
+			lcd_set(S, 4);
+			break;
+		case SO:
+  			//LCD->AR = LCD_AR_BLANK_MASK; 
+			//LCD->AR = arDefault;
+			lcd_ini();
+			lcd_set(S, 3);
+			lcd_set(O, 4);
+			break;
+		case SOS:
+  			//LCD->AR = LCD_AR_BLANK_MASK; 
+			//LCD->AR = arDefault;
+			lcd_ini();
+			lcd_set(S, 2);
+			lcd_set(O, 3);
+			lcd_set(S, 4);
+			isSOS = TRUE;
+			break;
+		default:
+  			LCD->AR = LCD_AR_BLANK_MASK; 
+			break;
+	}
+	state = nextState;
 }
 
 int main(void)
@@ -192,44 +228,16 @@ int main(void)
   irclk_ini(); // Enable internal ref clk to use by LCD
 
   lcd_ini();
+  arDefault = LCD->AR;
   enableInterrupts();
 
-  // 'Random' sequence :-)
-  volatile unsigned int sequence = 0x32B14D98,
-    index = 0;
 
-  while (index < 32) {
-  	lcd_display_time(hits,misses);
-	lock = LOCKED;
-    if (sequence & (1 << index)) { //odd
-      //
-      // Switch on green led
-	    switchLeds(GREEN);
-      //
-    } else { //even
-      //
-      // Switch on red led
-	    switchLeds(RED);
-      //
-    }
-    while (lock == LOCKED)
-    {
-	    ;
-    }
-    index++;
-  }
-
-  // Stop game and show blinking final result in LCD: hits:misses
-  lcd_display_time(hits,misses);
+  while (isSOS == FALSE) 
+	  ;
+  
+  GPIOD->PSOR |= (1 << 5);
+  GPIOE->PCOR |= (1 << 29);
   disableInterrupts();
   LCD->AR = LCD_AR_BLINK(1);
-  // shutting down leds
-  GPIOD->PSOR = (1 << 5);
-  GPIOE->PSOR |= (1 << 29);
-  //
-
-  while (1) {
-  }
-
   return 0;
 }

@@ -123,20 +123,23 @@ void PORTDIntHandler(void)
 	uint8_t nextState = 0x00;
 	volatile static uint8_t lcdValue = NONE;
 
-	GPIOD->PCOR |= (1 << 5);
-	for (int i = 0; i < 100000; i++);
-	GPIOD->PSOR |= (1 << 5);
 
 	if ((PORTC->PCR[3] & (1 << 24)) == (1 << 24)) {
 		PORTC->ISFR |= (1 << 3);
 		validInput = VALID;
 		input = DOT;
+		GPIOD->PCOR |= (1 << 5);
+		for (int i = 0; i < 100000; i++);
+		GPIOD->PSOR |= (1 << 5);
 	}
 
 	if ((PORTC->PCR[12] & (1 << 24)) == (1 << 24)) {
 		PORTC->ISFR |= (1 << 12);
 		validInput = (validInput == VALID) ? INVALID : VALID;
 		input = DASH;
+		GPIOD->PCOR |= (1 << 5);
+		for (int i = 0; i < 300000; i++);
+		GPIOD->PSOR |= (1 << 5);
 	}
 
 	if (validInput == INVALID) {

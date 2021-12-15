@@ -18,11 +18,13 @@
 #define SOS 55
 #define TRUE 0
 #define FALSE 1
+#define TIMEOUT_DEFAULT 10000
 
 
 
 volatile static uint8_t isSOS = FALSE;
 volatile static uint8_t arDefault;
+volatile static long timeout = TIMEOUT_DEFAULT;
 
 void irclk_ini()
 {
@@ -114,6 +116,19 @@ void disableInterrupts(void)
 	NVIC_DisableIRQ(31);
 }
 
+void SysTickIntHandler(void)
+{
+	if (timeout == TRUE) {
+		GPIOE->PCOR |= (1 << 29);
+		for (int i = 0; i < 100000; i++);
+		GPIOE->PSOR |= (1 << 29);
+		// request system request
+		SCB->AIRCR = (0x5FA<<SCB_AIRCR_VECTKEY_Pos)|SCB_AIRCR_SYSRESETREQ_Msk;
+	} else {
+		timeout--;
+	}
+}
+
 
 void PORTDIntHandler(void)
 {
@@ -123,6 +138,7 @@ void PORTDIntHandler(void)
 	uint8_t nextState = 0x00;
 	volatile static uint8_t lcdValue = NONE;
 
+	timeout = TIMEOUT_DEFAULT; // resets "watchdog" timer
 
 	if ((PORTC->PCR[3] & (1 << 24)) == (1 << 24)) {
 		PORTC->ISFR |= (1 << 3);
@@ -234,6 +250,7 @@ int main(void)
   arDefault = LCD->AR;
   enableInterrupts();
 
+  SysTick_Config(0x2000U);
 
   while (isSOS == FALSE) 
 	  ;

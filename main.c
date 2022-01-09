@@ -200,7 +200,9 @@ int main(void)
 			for (int i = 0; i < 100000; i++);
 			GPIOE->PCOR |= (1 << 20);
 			mustTick = FALSE;
-		} 
+		} else {
+			__WFI();
+		}
 	}
 	return 0;
 }
